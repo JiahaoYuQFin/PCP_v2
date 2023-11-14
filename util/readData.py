@@ -46,7 +46,8 @@ class Read4PCP(ReadABC):
 
         sql_txt = """
         SELECT tb1.TRADE_DT 'date', tb1.S_INFO_WINDCODE 'code', tb1.S_DQ_SETTLE 'settlement', 
-        tb2.S_INFO_STRIKEPRICE 'strike', tb2.S_INFO_MATURITYDATE 'maturity', tb2.S_INFO_CALLPUT 'cp'
+        tb2.S_INFO_STRIKEPRICE 'strike', tb2.S_INFO_MATURITYDATE 'maturity', tb2.S_INFO_CALLPUT 'cp', 
+        tb2.S_INFO_LPRICE 'lprice'
         FROM wind.CHINAOPTIONEODPRICES tb1
         INNER JOIN wind.CHINAOPTIONDESCRIPTION tb2 on (tb1.S_INFO_WINDCODE = tb2.S_INFO_WINDCODE) 
         AND (LEFT(tb2.S_INFO_SCCODE, 6) = {Und_code})
@@ -58,7 +59,8 @@ class Read4PCP(ReadABC):
         df['cp'] = (df['cp'] == 708001000) * 1 - (df['cp'] == 708002000)
         df['texp'] = (pd.to_datetime(df['maturity'], format='%Y%m%d') -
                       pd.to_datetime(df['date'], format='%Y%m%d')).dt.days
-        df['pre_settlement'] = df.groupby(['code'])['settlement'].shift(1).bfill()
+        df['pre_settlement'] = df.groupby(['code'])['settlement'].shift(1)
+        df['pre_settlement'].fillna(df['lprice'], inplace=True)
         return df.query("@start_dt <= date <= @end_dt")
 
     def remote(self, codes: list or tuple) -> pd.DataFrame:
