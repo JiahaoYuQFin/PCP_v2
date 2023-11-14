@@ -39,7 +39,7 @@ class SaveRes(SaveABC):
         df = pd.DataFrame(arr).T
         df.columns = col_name
         df.to_csv(self.path / filename, index=False)
-        print(f"{filename} has been saved.")
+        # print(f"{filename} has been saved.")
 
     def df2Exc(self, df: pd.DataFrame, filename: str = 'res.xlsx'):
         df.to_excel(self.path / filename, index=False)
@@ -47,5 +47,5 @@ class SaveRes(SaveABC):
     def df2Csv(self, df: pd.DataFrame, filename: str = 'res.csv'):
         df.to_csv(self.path / filename, index=False)
 
-    def toPkl(self, df: pd.DataFrame, filename: str = 'res.csv'):
+    def df2Pkl(self, df: pd.DataFrame, filename: str = 'res.csv'):
         df.to_pickle(self.path / filename)

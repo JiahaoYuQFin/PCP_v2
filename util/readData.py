@@ -6,7 +6,7 @@ Created on 2023/11/3 13:06
 from abc import ABC, abstractmethod
 from pathlib import Path
 import pymysql
-from sqlalchemy import create_engine, Connection
+from sqlalchemy import create_engine
 import dask.dataframe as dd
 import pandas as pd
 
@@ -22,6 +22,7 @@ class ReadABC(ABC):
             db_name: str = 'wind'
     ):
         self.path = Path(path)
+        # self.engine = create_engine(f"mysql://{usr}:{psw}@{host}:{port}/{db_name}")
         self.conn = pymysql.Connect(host=host, port=port, user=usr, passwd=psw, db=db_name)
 
     @abstractmethod
@@ -34,6 +35,7 @@ class ReadABC(ABC):
 
     def close_connect(self):
         self.conn.close()
+        # self.engine.dispose()
 
 
 class Read4PCP(ReadABC):
@@ -56,11 +58,11 @@ class Read4PCP(ReadABC):
         df['cp'] = (df['cp'] == 708001000) * 1 - (df['cp'] == 708002000)
         df['texp'] = (pd.to_datetime(df['maturity'], format='%Y%m%d') -
                       pd.to_datetime(df['date'], format='%Y%m%d')).dt.days
-        df['pre_settlement'] = df.groupby(['code'])['settlement'].shift(1)
+        df['pre_settlement'] = df.groupby(['code'])['settlement'].shift(1).bfill()
         return df.query("@start_dt <= date <= @end_dt")
 
     def remote(self, codes: list or tuple) -> pd.DataFrame:
-        print(f"Spot and Option's ticks are loading...")
+        print(f"{self.path.parts[-2]}: Spot and Option's ticks are loading...")
 
         # 1. read etf file, and its time index
         etf_file = list(self.path.glob('sh_510050_*'))[0]
@@ -84,7 +86,6 @@ class Read4PCP(ReadABC):
 
         df_opt = pd.DataFrame(index=pd.MultiIndex.from_product([spot_ts, codes]))
         df_opt.index.names = ['ts', 'code']
-        # df_opt = pd.concat([df_opt, df_opt_ori.set_index(['ts', 'code'])], axis=1, join='outer').sort_index()
         df_opt = (df_opt.join(df_opt_ori.set_index(['ts', 'code']), how='outer')).sort_index()
         df_opt = df_opt.groupby('code').ffill().loc[spot_ts].reset_index()
 

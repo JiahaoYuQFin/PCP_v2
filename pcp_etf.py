@@ -28,13 +28,13 @@ class PCPABC(ABC):
         """
         self.rl = kwargs.get('lend_rate', 0.015)
         self.rb = kwargs.get('borrow_rate', 0.015)
-        self.margin_multiplier = kwargs.get('margin_multiplier', 1.2)   # 开仓保证金预存安全系数
+        self.margin_multiplier = kwargs.get('margin_multiplier', [1.4, 1.3, 1.2])   # 开仓保证金预存安全系数
         self.ret_threshold = 0.00
         self.contract_month = None     # 去除当天到期的合约后，None代表全部，0代表最近月，1代表次近月，以此类推
 
         # general option
         self.opt_multiplier = 10000
-        self.opt_commission = 10
+        self.opt_commission = 1.7
         self.exercise_commission = 5
 
         # index option
@@ -45,7 +45,7 @@ class PCPABC(ABC):
         self.spot_multiplier = 100
         self.spot_commission_rate = 1e-3
         self.spot_short_margin_rate = 0.75
-        self.spot_short_intr = kwargs.get('spot_short_intr_rate', 0.106)
+        self.spot_short_intr = kwargs.get('spot_short_intr_rate', 0.07)
 
         # future
         self.fut_multiplier = kwargs.get('fut_multiplier', 300)
@@ -123,7 +123,7 @@ class ETFpcp(PCPABC):
                     (cp == -1) * np.minimum(settlement_price + np.maximum(a * spot - otm, b * strike), strike)
             )
 
-        return margin * self.margin_multiplier
+        return margin
 
     def arbitrage_ret(
             self,
@@ -175,6 +175,10 @@ class ETFpcp(PCPABC):
         """
         max_lot = np.minimum(volume_call, volume_put, volume_spot*self.spot_multiplier//self.opt_multiplier)
         num = max_lot
+        margin *= (
+                (texp <= 7) * self.margin_multiplier[0] + (7 < texp) * (texp <= 14) * self.margin_multiplier[1] +
+                (14 < texp) * self.margin_multiplier[2]
+        )
         if direction == 1:
             cf0 = (
                 self.opt_multiplier *
@@ -242,7 +246,7 @@ class ETFpcp(PCPABC):
 
             freq_occur = df.groupby(['texp'])['ret'].agg(avg_ret=lambda x: x[x > 0].mean(),
                                                          positive_ret_ratio=lambda x: (x > 0).mean())
-            res = freq_occur.merge(average_durations, left_index=True, right_index=True)
+            res = freq_occur.merge(average_durations, left_index=True, right_index=True, how='left').fillna(0)
         else:
             df['block'] = (df['sign'] != df['sign'].shift()).cumsum()
             time_diffs = df[df['sign'] == 1].groupby(['block'])['time'].apply(lambda x: x.max() - x.min())
@@ -253,19 +257,5 @@ class ETFpcp(PCPABC):
             res = pd.DataFrame([df['texp'].tolist()[0], avg_ret, freq_occur, average_durations],
                                columns=['texp', 'avg_ret', 'positive_ret_ratio', 'avg_dur'])
             res.set_index('texp', inplace=True)
-        # else:
-        #     if (ret > 0).sum() <= 0:
-        #         return 0, 0
-        #
-        #     time_vals = int_to_seconds(time_vals)
-        #     df = pd.DataFrame(np.c_[time_vals, ret], columns=['time', 'ret'])
-        #     df.insert(1, column='code', value=code_vals)
-        #
-        #     df['sign'] = np.sign(df['ret'])
-        #     freq_occur = (df['sign'] > 0).sum() / df.shape[0]
-        #
-        #
-        #
-        #     ddf = dd.from_pandas(df, npartitions=5)
         return res
 
