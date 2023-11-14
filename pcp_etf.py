@@ -30,7 +30,7 @@ class PCPABC(ABC):
         self.rb = kwargs.get('borrow_rate', 0.015)
         self.margin_multiplier = kwargs.get('margin_multiplier', [1.4, 1.3, 1.2])   # 开仓保证金预存安全系数
         self.ret_threshold = 0.00
-        self.contract_month = None     # 去除当天到期的合约后，None代表全部，0代表最近月，1代表次近月，以此类推
+        self.contract_month = None     # None代表全部合约，0代表最近月，1代表次近月，以此类推
 
         # general option
         self.opt_multiplier = 10000
@@ -53,7 +53,7 @@ class PCPABC(ABC):
         self.fut_commission_rate = kwargs.get('fut_commission_rate', 23e-6)
 
     def convert_df_to_input(self, df_opt: pd.DataFrame, df_opt_info: pd.DataFrame) -> MarketElement:
-        df_opt = (df_opt.merge(df_opt_info, on=['date', 'code'], how='left')).query("texp > 0")
+        df_opt = (df_opt.merge(df_opt_info, on=['date', 'code'], how='left'))#.query("texp > 0")
         df_unstack = df_opt.set_index(['time', 'maturity', 'strike', 'cp']).unstack(level='cp').swaplevel(0, 1, axis=1)
         market_dic = {
             'time': df_unstack[1].reset_index()['time'].values,
