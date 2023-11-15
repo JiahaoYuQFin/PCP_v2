@@ -30,7 +30,7 @@ class PCPABC(ABC):
         self.rb = kwargs.get('borrow_rate', 0.015)
         self.margin_multiplier = kwargs.get('margin_multiplier', [1.4, 1.3, 1.2])   # 开仓保证金预存安全系数
         self.ret_threshold = 0.00
-        self.contract_month = None     # None代表全部合约，0代表最近月，1代表次近月，以此类推
+        self.contract_month = kwargs.get('contract_month', None)     # None代表全部合约，0代表最近月，1代表次近月，以此类推
 
         # general option
         self.opt_multiplier = 10000
@@ -58,6 +58,7 @@ class PCPABC(ABC):
         market_dic = {
             'time': df_unstack[1].reset_index()['time'].values,
             'texp': df_unstack[1]['texp'].values,
+            'maturity': df_unstack[1].reset_index()['maturity'].values,
             'strike': df_unstack[1].reset_index()['strike'].values,
             'code': df_unstack[1]['code'].tolist(),
             'call_settlement': df_unstack[1]['pre_settlement'].values,
@@ -137,6 +138,7 @@ class ETFpcp(PCPABC):
             spot,
             strike,
             texp: Union[np.ndarray, int, float],
+            maturity,
             direction: int
     ):
         """
@@ -208,24 +210,25 @@ class ETFpcp(PCPABC):
             raise ValueError(f"Invalid direction '{direction}'. Expected one of [1, -1].")
 
         r = (- expt_profit / occupied_cash) * (num > 0)
-        df = pd.DataFrame(np.c_[time_vals, expt_profit * (r >= self.ret_threshold) * num, -occupied_cash * num, texp],
-                          columns=['time', 'profit', 'cash_used', 'texp'])
+        df = pd.DataFrame(np.c_[time_vals, expt_profit * (r >= self.ret_threshold)*num, -occupied_cash * num, maturity],
+                          columns=['time', 'profit', 'cash_used', 'maturity'])
         if self.contract_month is None:
-            df2 = df.groupby(['time', 'texp']).apply(
+            df2 = df.groupby(['time', 'maturity']).apply(
                 lambda x: x['profit'].sum() / x['cash_used'].sum() if x['cash_used'].sum() != 0 else 0).to_frame(
                 name='ret')
         else:
-            target_texp = np.sort(np.unique(texp))[self.contract_month]
-            df = df.query("texp==@target_texp")
+            target_maturity = np.sort(np.unique(maturity))[self.contract_month]
+            df = df.query("maturity==@target_maturity").copy()
             df2 = df.groupby('time').apply(
                 lambda x: x['profit'].sum() / x['cash_used'].sum() if x['cash_used'].sum() != 0 else 0).to_frame(
                 name='ret')
-        return r, df2
+            df2['maturity'] = target_maturity
+        return r, df2.reset_index()
 
-    def get_indicator(self, ret, time_vals=None, code_vals=None):
+    def get_indicator(self, ret, maturity_vals=None):
         if (ret['ret'].values > 0).sum() <= 0:
-            res = pd.DataFrame(0, columns=['avg_ret', 'positive_ret_ratio', 'avg_dur'], index=ret['texp'].unique())
-            res.index.name = 'texp'
+            res = pd.DataFrame(0, columns=['avg_ret', 'positive_ret_ratio', 'avg_dur'], index=ret['maturity'].unique())
+            res.index.name = 'maturity'
             return res
         df = ret.copy()
         df['time'] = int_to_seconds(df['time'].values)
@@ -236,16 +239,16 @@ class ETFpcp(PCPABC):
                 group['block'] = (group['sign'] != group['sign'].shift())
                 group['block'] = group['block'].cumsum()
                 return group
-            df = df.groupby('texp', group_keys=False).apply(calculate_blocks)
+            df = df.groupby('maturity', group_keys=False).apply(calculate_blocks)
 
             # 计算每个连续区间的时间差
-            time_diffs = df[df['sign'] == 1].groupby(['texp', 'block'])['time'].apply(lambda x: x.max() - x.min())
+            time_diffs = df[df['sign'] == 1].groupby(['maturity', 'block'])['time'].apply(lambda x: x.max() - x.min())
             # 计算平均持续时间
             average_durations = time_diffs.groupby(level=0).mean()
             average_durations.name = 'avg_dur'
 
-            freq_occur = df.groupby(['texp'])['ret'].agg(avg_ret=lambda x: x[x > 0].mean(),
-                                                         positive_ret_ratio=lambda x: (x > 0).mean())
+            freq_occur = df.groupby(['maturity'])['ret'].agg(avg_ret=lambda x: x[x > 0].mean(),
+                                                             positive_ret_ratio=lambda x: (x > 0).mean())
             res = freq_occur.merge(average_durations, left_index=True, right_index=True, how='left').fillna(0)
         else:
             df['block'] = (df['sign'] != df['sign'].shift()).cumsum()
@@ -254,8 +257,8 @@ class ETFpcp(PCPABC):
 
             freq_occur = (df['sign'] > 0).mean()
             avg_ret = df.loc[df['sign'] > 0, 'ret'].mean()
-            res = pd.DataFrame([df['texp'].tolist()[0], avg_ret, freq_occur, average_durations],
-                               columns=['texp', 'avg_ret', 'positive_ret_ratio', 'avg_dur'])
-            res.set_index('texp', inplace=True)
+            res = pd.DataFrame([df['maturity'].tolist()[0], avg_ret, freq_occur, average_durations],
+                               index=['maturity', 'avg_ret', 'positive_ret_ratio', 'avg_dur']).T
+            res.set_index('maturity', inplace=True)
         return res
 

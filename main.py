@@ -18,24 +18,28 @@ def run(file: Path):
     opt_codes = df_opt_info['code'].tolist()
     df_opt = data_repo.remote(codes=opt_codes)
 
-    model = ETFpcp()
+    model = ETFpcp(contract_month=None)
     mslice = model.convert_df_to_input(df_opt=df_opt, df_opt_info=df_opt_info)
     cmargin = model.get_margin(mslice.call_settlement, mslice.spot_close, mslice.strike, 1)
     pmargin = model.get_margin(mslice.put_settlement, mslice.spot_close, mslice.strike, -1)
 
     fwd_ret, wr1 = model.arbitrage_ret(
         mslice.time, mslice.call_bp1, mslice.put_ap1, mslice.call_bv1, mslice.put_av1, mslice.spot_av1,
-        cmargin, mslice.spot_ap1, mslice.strike, mslice.texp, 1)
+        cmargin, mslice.spot_ap1, mslice.strike, mslice.texp, mslice.maturity, 1)
     bwd_ret, wr2 = model.arbitrage_ret(
         mslice.time, mslice.call_ap1, mslice.put_bp1, mslice.call_av1, mslice.put_bv1, mslice.spot_bv1,
-        pmargin, mslice.spot_bp1, mslice.strike, mslice.texp, -1)
+        pmargin, mslice.spot_bp1, mslice.strike, mslice.texp, mslice.maturity, -1)
     # SaveRes(folder_name='expected_ret').np2Csv(
     #     [int_to_seconds(mslice.time), mslice.code, mslice.texp, mslice.strike, fwd_ret, bwd_ret],
     #     ['time', 'code', 'texp', 'strike', 'fret', 'bret'], f"{today}.csv"
     # )
+    SaveRes(folder_name='expected_ret').np2Csv(
+        [(wr1['time']/1e3).astype('int32').to_list(), wr1['maturity'].values, wr1['ret'].values, wr2['ret'].values],
+        ['time', 'maturity', 'fret', 'bret'], f"{today}.csv"
+    )
 
-    df_output = model.get_indicator(wr1.reset_index(), mslice.time, mslice.code)
-    df_output2 = model.get_indicator(wr2.reset_index())
+    df_output = model.get_indicator(wr1)
+    df_output2 = model.get_indicator(wr2)
 
     df_output = df_output.merge(df_output2, left_index=True, right_index=True, suffixes=('_f', '_b'))
     df_output.insert(0, 'date', today)
@@ -44,8 +48,8 @@ def run(file: Path):
 
 if __name__ == '__main__':
     # 1. input the date
-    start_dt = '20150301'
-    end_dt = '20231113'
+    start_dt = '20230925'
+    end_dt = '20231025'
 
     data_dir = Path(__file__).parent / 'data'
     if not (data_dir / f'opt_info.pkl').exists():
@@ -55,9 +59,9 @@ if __name__ == '__main__':
     # 2. input the director of tick data
     target_dir = Path(r'Z://tick/stock')
     target_dir = sorted(target_dir.glob('*'))
-    res = Parallel(n_jobs=20)(
+    res = Parallel(n_jobs=5)(
         delayed(run)(f / 'quote')
         for f in target_dir if start_dt <= f.parts[-1] <= end_dt
     )
-    df = pd.concat(res, ignore_index=False, axis=0).reset_index().sort_values(['date', 'texp'])
-    SaveRes(dir_path=Path(__file__).parent / 'result').df2Exc(df, 'ret.xlsx')
+    df = pd.concat(res, ignore_index=False, axis=0).reset_index().sort_values(['date', 'maturity'])
+    SaveRes(dir_path=Path(__file__).parent / 'result').df2Exc(df, 'ret_as_texp.xlsx')

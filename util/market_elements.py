@@ -21,6 +21,7 @@ class MarketElement(ABC):
         self.put_settlement = kwargs.get('put_settlement', None)
         self.strike = kwargs.get('strike', None)
         self.texp = kwargs.get('texp', None)
+        self.maturity = kwargs.get('maturity', None)
 
         self.call_ap1 = kwargs.get('call_ap1', None)
         self.call_bp1 = kwargs.get('call_bp1', None)
