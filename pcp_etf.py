@@ -223,9 +223,9 @@ class ETFpcp(PCPABC):
                 lambda x: x['profit'].sum() / x['cash_used'].sum() if x['cash_used'].sum() != 0 else 0).to_frame(
                 name='ret')
             df2['maturity'] = target_maturity
-        return r, df2.reset_index()
+        return r, num, df2.reset_index()
 
-    def get_indicator(self, ret, maturity_vals=None):
+    def get_indicator(self, ret):
         if (ret['ret'].values > 0).sum() <= 0:
             res = pd.DataFrame(0, columns=['avg_ret', 'positive_ret_ratio', 'avg_dur'], index=ret['maturity'].unique())
             res.index.name = 'maturity'

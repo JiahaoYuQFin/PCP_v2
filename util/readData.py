@@ -45,15 +45,17 @@ class Read4PCP(ReadABC):
         start_dt1 = (pd.to_datetime(start_dt, format='%Y%m%d') - pd.DateOffset(days=10)).strftime('%Y%m%d')
 
         sql_txt = """
-        SELECT tb1.TRADE_DT 'date', tb1.S_INFO_WINDCODE 'code', tb1.S_DQ_SETTLE 'settlement', 
-        tb2.S_INFO_STRIKEPRICE 'strike', tb2.S_INFO_MATURITYDATE 'maturity', tb2.S_INFO_CALLPUT 'cp', 
-        tb2.S_INFO_LPRICE 'lprice'
+        SELECT tb1.TRADE_DT `date`, tb1.S_INFO_WINDCODE `code`, tb1.S_DQ_SETTLE `settlement`, 
+        tb2.S_INFO_STRIKEPRICE `strike`, tb2.S_INFO_MATURITYDATE `maturity`, tb2.S_INFO_CALLPUT `cp`, 
+        tb2.S_INFO_LPRICE `lprice`, tb3.S_DQ_CLOSE `close_spot`
         FROM wind.CHINAOPTIONEODPRICES tb1
         INNER JOIN wind.CHINAOPTIONDESCRIPTION tb2 on (tb1.S_INFO_WINDCODE = tb2.S_INFO_WINDCODE) 
-        AND (LEFT(tb2.S_INFO_SCCODE, 6) = {Und_code})
+        AND (LEFT(tb2.S_INFO_SCCODE, 6) = LEFT('{Und_code}', 6))
+        INNER JOIN wind.CHINACLOSEDFUNDEODPRICE tb3 on (tb3.S_INFO_WINDCODE = '{Und_code}') 
+        AND (tb3.TRADE_DT = tb1.TRADE_DT)
         WHERE tb1.TRADE_DT BETWEEN {Start_date} AND {End_date}
         ORDER BY tb1.TRADE_DT, tb1.S_INFO_WINDCODE
-        """.format(Start_date=start_dt1, End_date=end_dt, Und_code=und.split('.')[0])
+        """.format(Start_date=start_dt1, End_date=end_dt, Und_code=und)
 
         df = pd.read_sql(sql=sql_txt, con=self.conn)
         df['cp'] = (df['cp'] == 708001000) * 1 - (df['cp'] == 708002000)
@@ -97,3 +99,9 @@ class Read4PCP(ReadABC):
 
         return df_merge
 
+
+class ReadCommodity(ReadABC):
+    def database(self, start_dt='20231001', end_dt='20231101', future_name='C') -> pd.DataFrame:
+        print(f"{future_name}'s option info is loading...")
+
+        return 0
